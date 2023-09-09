@@ -1,0 +1,12 @@
+name: Tests
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Install Babashka
+      run: bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+    - name: Run tests
+      run: bb test
