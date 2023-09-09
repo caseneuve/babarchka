@@ -1,14 +1,42 @@
 {:paths ["." "src" "test"]
  :tasks
- {:requires ([babashka.cli :as cli])
+ {:requires ([babashka.cli :as cli]
+             [clojure.string :refer [upper-case]])
   :init
-  (defn parse-test-args []
-    (try
-      (cli/parse-opts
-       *command-line-args*
-       {:alias {:n :name :m :mark}
-        :coerce {:name :string :mark :string}})
-      (catch Exception e
-        {:error (str (ex-message e) " " *command-line-args*)})))
-  test {:doc "Run all tests, or run only matching --mark / --name"
-        :task (exec 'tests-babarchka/-main {:exec-args (parse-test-args)})}}}
+  (do
+    (defn parse-test-args []
+      (try
+        (cli/parse-opts
+         *command-line-args*
+         {:alias {:n :name :m :mark}
+          :coerce {:name :string :mark :string}})
+        (catch Exception e
+          {:error (str (ex-message e) " " *command-line-args*)})))
+    (defn -task [] (format "[BABARCHKA @%s]" (-> (current-task) :name upper-case)))
+    (defn log [msg] (printf "\n%s %s\n\n" (-task) msg) (flush))
+    (def docker {:image "bbarch" :name "scripts" :file "./dockerfiles/Dockerfile"}))
+  test
+  {:doc "Run all tests, or run only matching --mark / --name"
+   :task (exec 'tests-babarchka/-main {:exec-args (parse-test-args)})}
+  docker:build
+  {:doc "Build a Docker container from ./dockerfiles/Dockerfile"
+   :enter (log (format "Building a Docker image from %s" (:file docker)))
+   :task (shell (format "docker build -t %s -f %s ." (:image docker) (:file docker)))}
+  docker:run
+  {:doc "Run container `(:name docker)`"
+   :enter (log (format "Running Docker container %s" (:name docker)))
+   :task (shell (format "docker run -t --name %s --ulimit nofile=1024:524288 %s"
+                      (:name docker) (:image docker)))}
+  docker:clean
+  {:doc "Remove image and container created from ./dockerfiles/Dockerfile"
+   :enter (log (format "Removing Docker image '%s' and container '%s'" (:image docker) (:name docker)))
+   :task (do (shell (format "docker rm -fv %s" (:name docker)))
+             (shell (format "docker image rm %s" (:image docker))))}
+  docker
+  {:doc "Execute build, run and clean docker tasks"
+   :enter (log "Go!")
+   :leave (log "Done!")
+   :task (do (run 'docker:build)
+             (run 'docker:run)
+             (run 'docker:clean))}
+  }}

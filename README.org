@@ -5,7 +5,22 @@
 
 * Tests
 
+To run unit tests:
+
 #+begin_src shell
 bb test [[--mark STR] [--name STR]]
 #+end_src
 
+To test scripts in a Docker container:
+
+#+begin_src shell
+bb docker
+#+end_src
+
+which is equivalent to:
+
+#+begin_src shell
+bb docker:build
+bb docker:run
+bb docker:clean
+#+end_src
