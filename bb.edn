@@ -1,4 +1,4 @@
-{:paths ["."]
+{:paths ["." "src" "test"]
  :tasks
  {:requires ([babashka.cli :as cli])
   :init
@@ -11,4 +11,4 @@
       (catch Exception e
         {:error (str (ex-message e) " " *command-line-args*)})))
   test {:doc "Run all tests, or run only matching --mark / --name"
-        :task (exec 'tests-bbarchka/-main {:exec-args (parse-test-args)})}}}
+        :task (exec 'tests-babarchka/-main {:exec-args (parse-test-args)})}}}
