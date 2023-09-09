@@ -1,4 +1,6 @@
-(ns testing
+(ns runner
+  "Simple test runner based on `clojure.test` providing ability to chose tests
+  by name or mark"
   (:require [clojure.test :as test]
             [clojure.string :as s]))
 

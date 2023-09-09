@@ -4,7 +4,7 @@
    [clojure.test :refer [deftest is run-tests testing use-fixtures]]
    [flatland.ordered.map :refer [ordered-map]]
    [babarchka :as b]
-   [testing :refer [run-matching-tests]]
+   [runner :refer [run-matching-tests]]
    ))
 
 (def ^:dynamic *cfg-file* nil)
