@@ -1,0 +1,8 @@
+#+title: Babarchka -- setup Arch Linux with Babashka
+
+* Tests
+
+#+begin_src shell
+bb test [[--mark STR] [--name STR]]
+#+end_src
+
