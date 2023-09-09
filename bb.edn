@@ -1,0 +1,14 @@
+{:paths ["."]
+ :tasks
+ {:requires ([babashka.cli :as cli])
+  :init
+  (defn parse-test-args []
+    (try
+      (cli/parse-opts
+       *command-line-args*
+       {:alias {:n :name :m :mark}
+        :coerce {:name :string :mark :string}})
+      (catch Exception e
+        {:error (str (ex-message e) " " *command-line-args*)})))
+  test {:doc "Run all tests, or run only matching --mark / --name"
+        :task (exec 'tests-bbarchka/-main {:exec-args (parse-test-args)})}}}
