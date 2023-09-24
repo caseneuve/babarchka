@@ -34,7 +34,7 @@ log "Generating a development package database for *-git packages that were inst
 yay -Y --gendb
 
 log "Checking for development package updates"
-yay -Syu --devel
+yay -Syu --devel --noconfirm
 
 log "Making development package updates permanently enabled"
 yay -Y --devel --save

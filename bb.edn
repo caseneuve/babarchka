@@ -4,6 +4,10 @@
              [clojure.string :refer [upper-case]])
   :init
   (do
+    (defn colored [& args]
+      (let [color (update-vals {:blue 34 :magenta 35 :reset 0} (fn [s] (str "\033[" s "m")))]
+       (apply str (for [a args] (if (keyword? a) (a color) a)))))
+
     (defn parse-test-args []
       (try
         (cli/parse-opts
@@ -13,16 +17,31 @@
         (catch Exception e
           {:error (str (ex-message e) " " *command-line-args*)})))
 
-    (defn -task [] (format "[BABARCHKA @%s]" (-> (current-task) :name upper-case)))
+    (defn parse-docker-args []
+      (cli/parse-opts *command-line-args* {:alias {:q :quick} :coerce {:quick :boolean}}))
 
-    (defn log [msg] (printf "\n%s %s\n\n" (-task) msg) (flush))
+    (defn -task []
+      (colored :blue "[BABARCHKA @" :magenta (-> (current-task) :name upper-case) :blue "]" :reset))
 
-    (def docker {:image "bbarch" :name "scripts" :file "./dockerfiles/Dockerfile"})
+    (defn log [msg] (printf "%s %s\n" (-task) msg) (flush))
+
+    (def docker
+      {:base "archlinux"
+       :file "./dockerfiles/Dockerfile"
+       :image "bbarch"
+       :name "scripts"})
     )
 
   test
   {:doc "Run all tests, or run only matching --mark / --test-name / --namespace"
-   :task (exec 'tests.runner/-main {:exec-args (parse-test-args)})}
+   :enter (log "Looking for tests...")
+   :task (exec 'tests.runner/-main {:exec-args (parse-test-args)})
+   :leave (log "Done!")}
+
+  docker:pull
+  {:doc "Update local archlinux image"
+   :enter (log (format "Updating base image: %s" (:base docker)))
+   :task (shell (format "docker pull %s" (:base docker)))}
 
   docker:build
   {:doc "Build a Docker container from ./dockerfiles/Dockerfile"
@@ -46,10 +65,11 @@
              (shell (format "docker image rm %s" (:image docker))))}
 
   docker
-  {:doc "Execute build, run and clean docker tasks"
+  {:doc "Execute all docker tasks, with --quick, skip pulling"
    :enter (log "Go!")
    :leave (log "Done!")
-   :task (do (run 'docker:build)
+   :task (do (when-not (:quick (parse-docker-args))
+               (run 'docker:pull))
+             (run 'docker:build)
              (run 'docker:run)
-             (run 'docker:clean))}
-  }}
+             (run 'docker:clean))}}}
