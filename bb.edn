@@ -1,4 +1,4 @@
-{:paths ["." "src" "test"]
+{:paths ["."]
  :tasks
  {:requires ([babashka.cli :as cli]
              [clojure.string :refer [upper-case]])
@@ -8,8 +8,8 @@
       (try
         (cli/parse-opts
          *command-line-args*
-         {:alias {:n :name :m :mark}
-          :coerce {:name :string :mark :string}})
+         {:alias {:t :test-name :m :mark :n :namespace}
+          :coerce {:test-name :string :mark :string :namespace :string}})
         (catch Exception e
           {:error (str (ex-message e) " " *command-line-args*)})))
 
@@ -21,8 +21,8 @@
     )
 
   test
-  {:doc "Run all tests, or run only matching --mark / --name"
-   :task (exec 'tests-babarchka/-main {:exec-args (parse-test-args)})}
+  {:doc "Run all tests, or run only matching --mark / --test-name / --namespace"
+   :task (exec 'tests.runner/-main {:exec-args (parse-test-args)})}
 
   docker:build
   {:doc "Build a Docker container from ./dockerfiles/Dockerfile"
