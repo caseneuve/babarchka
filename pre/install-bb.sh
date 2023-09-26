@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-source common.sh
+source ./pre/common.sh
 
 CMD=bb
 PKG=babashka-bin

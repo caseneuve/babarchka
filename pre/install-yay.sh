@@ -2,7 +2,7 @@
 
 set -e
 
-source common.sh
+source ./pre/common.sh
 
 # using binary to avoid installing go
 PKG=yay-bin
