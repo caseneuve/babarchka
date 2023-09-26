@@ -14,9 +14,6 @@ CWD=$(pwd)
 log "CWD was $CWD"
 cd
 
-log "Installing git"
-sudo pacman -S --needed --noconfirm git
-
 log "Installing $PKG"
 git clone https://aur.archlinux.org/$PKG.git \
     && cd yay-bin \
