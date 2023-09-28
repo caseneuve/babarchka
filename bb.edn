@@ -1,42 +1,80 @@
 {:paths ["."]
  :tasks
  {:requires ([babashka.cli :as cli]
+             [babashka.process :refer [process]]
              [clojure.string :refer [upper-case]])
   :init
   (do
+    ;; defaults
+    (def docker
+      {:base "archlinux"
+       :file "./dockerfiles/Dockerfile"
+       :tag "bbarch"
+       :name "fts"})
+
+    ;; state
+    (def errors (atom false))
+
+    ;; logging
     (defn colored [& args]
-      (let [color (update-vals {:blue 34 :magenta 35 :reset 0} (fn [s] (str "\033[" s "m")))]
-       (apply str (for [a args] (if (keyword? a) (a color) a)))))
+      (let [color (update-vals {:red 31, :green 32, :blue 34, :magenta 35, :reset 0, :bold 1}
+                               (fn [s] (str "\033[" s "m")))]
+        (apply str (for [a args] (if (keyword? a) (a color) a)))))
+
+    (defn -task []
+      (colored :blue "[BABARCHKA @" :magenta (-> (current-task) :name upper-case) :blue "]" :reset))
+
+    (defn log [msg & colors]
+      (let [task
+            (colored
+             :blue "[BABARCHKA @" :magenta (-> (current-task) :name upper-case) :blue "]" :reset)
+            msg (if colors (apply colored (concat colors (list msg :reset))) msg)]
+        (printf "%s %s\n" task msg))
+      (flush))
+
+    (defn leave []
+      (apply
+       log
+       (if (deref errors)
+         ["Ran with errors" :red :bold]
+         ["Done!" :green :bold])))
+
+    ;; cli args
+    (def B :boolean)
+    (def S :string)
 
     (defn parse-test-args []
       (try
         (cli/parse-opts
          *command-line-args*
-         {:alias {:t :test-name :m :mark :n :namespace}
-          :coerce {:test-name :string :mark :string :namespace :string}})
-        (catch Exception e
-          {:error (str (ex-message e) " " *command-line-args*)})))
+         {:alias {:t :test-name, :m :mark, :n :namespace}
+          :coerce {:test-name S, :mark S, :namespace S}})
+        (catch Exception e {:error (str (ex-message e) " " *command-line-args*)})))
 
     (defn parse-docker-args []
-      (cli/parse-opts *command-line-args* {:alias {:q :quick} :coerce {:quick :boolean}}))
+      (let [[B S] [:boolean :string]]
+        (into
+         docker
+         (cli/parse-opts
+          *command-line-args*
+          {:alias  {:q :quick, :c :cmd, :C :container, :I :image, :f :force, :s :silent, :t :tag, :n :name}
+           :coerce {:quick B, :c S, :C B, :I B, :f B, :s B, :t S, :n S}}))))
 
-    (defn -task []
-      (colored :blue "[BABARCHKA @" :magenta (-> (current-task) :name upper-case) :blue "]" :reset))
-
-    (defn log [msg] (printf "%s %s\n" (-task) msg) (flush))
-
-    (def docker
-      {:base "archlinux"
-       :file "./dockerfiles/Dockerfile"
-       :image "bbarch"
-       :name "scripts"})
+    ;; process wrapper
+    (defn run-and-catch [cmd & [args]]
+      (let [opts (cond-> {:err :string :out *out*} (:silent args) (dissoc :out)),
+            [err exit] (-> (process cmd opts) deref (select-keys [:err :exit]) vals)]
+        (when-not (and (empty? err) (zero? exit))
+          (when-not (:silent args) (print err))
+          (reset! errors true))
+        exit))
     )
 
   test
   {:doc "Run all tests, or run only matching --mark / --test-name / --namespace"
    :enter (log "Looking for tests...")
    :task (exec 'tests.runner/-main {:exec-args (parse-test-args)})
-   :leave (log "Done!")}
+   :leave (leave)}
 
   docker:pull
   {:doc "Update local archlinux image"
@@ -46,30 +84,49 @@
   docker:build
   {:doc "Build a Docker container from ./dockerfiles/Dockerfile"
    :enter (log (format "Building a Docker image from %s" (:file docker)))
-   :task (shell (format "docker build --tag %s --file %s ." (:image docker) (:file docker)))}
+   :task
+   (let [{:keys [tag file]} (parse-docker-args)]
+     (try
+       ;; using shell to get real-time output
+       ;; set nofile ulimits to Arch defaults, otherwise fakeroot will hang:
+       ;; https://wiki.archlinux.org/title/Limits.conf#nofile
+       ;; run `grep NOFILE /etc/systemd/system.conf` to see defaults
+       (shell (format "docker build --ulimit nofile=1024:524288 --tag %s --file %s ." tag file))
+       (catch Exception e (reset! errors true))))
+   :leave (leave)}
 
   docker:run
-  {:doc "Run container `(:name docker)`"
-   :enter (log (format "Running Docker container %s" (:name docker)))
-   ;; set nofile ulimits to Arch defaults, otherwise fakeroot will hang:
-   ;; https://wiki.archlinux.org/title/Limits.conf#nofile
-   ;; run `grep NOFILE /etc/systemd/system.conf` to see defaults
-   :task (shell (format "docker run --tty --name %s --ulimit nofile=1024:524288 %s"
-                        (:name docker) (:image docker)))}
+  {:doc "Run container 'fts', with --cmd CMD run that command instead of default 'bb test'"
+   :enter (log (format "Running Docker container from image '%s'" (:tag (parse-docker-args))))
+   :task
+   (let [{:keys [name tag] :as args} (parse-docker-args)
+         extra (if-let [c (:cmd args)] (format "'%s'" c) "")
+         exit (run-and-catch (format "docker run --tty --name %s %s %s" name tag extra) args)]
+     (log (format "Removing container '%s'" name))
+     (run-and-catch (format "docker rm %s --force" name) {:silent true}))
+   :leave (leave)}
 
   docker:clean
   {:doc "Remove image and container created from ./dockerfiles/Dockerfile"
-   :enter (log (format "Removing Docker image '%s' and container '%s'"
-                       (:image docker) (:name docker)))
-   :task (do (shell (format "docker rm %s" (:name docker)))
-             (shell (format "docker image rm %s" (:image docker))))}
+   :enter (log "Cleaning docker")
+   :task
+   (let [{:keys [name tag] :as args} (parse-docker-args)
+         -force (if force "--force" "")]
+     (doseq [[k cmd] {:container (format "docker container rm %s %s" name -force)
+                      :image (format "docker image rm %s %s" tag -force)}]
+       (when (k args)
+         (log k)
+         (run-and-catch cmd {:silent true}))))
+   :leave (leave)}
 
-  docker
-  {:doc "Execute all docker tasks, with --quick, skip pulling"
-   :enter (log "Go!")
-   :leave (log "Done!")
-   :task (do (when-not (:quick (parse-docker-args))
-               (run 'docker:pull))
-             (run 'docker:build)
-             (run 'docker:run)
-             (run 'docker:clean))}}}
+  ;; TODO: needs an update
+  ;; docker
+  ;; {:doc "Execute all docker tasks, with --quick, skip pulling"
+  ;;  :enter (log "Go!")
+  ;;  :leave (leave)
+  ;;  :task (do (when-not (:quick (parse-docker-args))
+  ;;              (run 'docker:pull))
+  ;;            (run 'docker:build)
+  ;;            (run 'docker:run)
+  ;;            (run 'docker:clean))}
+  }}
