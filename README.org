@@ -1,7 +1,7 @@
 [[https://img.shields.io/badge/License-MIT-yellow.svg]]
 [[https://github.com/caseneuve/babarchka/actions/workflows/run-tests.yml/badge.svg]]
 
-#+title: Babarchka -- setup Arch Linux with Babashka
+#+title: Babarchka -- setup Arch Linux with Babashka (alpha)
 
 * Tests
 
@@ -14,13 +14,24 @@ bb test [[--mark STR] [--test-name STR] [--namespace STR]]
 To test scripts in a Docker container:
 
 #+begin_src shell
-bb docker
-#+end_src
-
-which is equivalent to:
-
-#+begin_src shell
 bb docker:build
 bb docker:run
-bb docker:clean
+#+end_src
+
+
+For more info:
+
+#+begin_src shell :results drawer
+bb tasks
+#+end_src
+
+#+RESULTS:
+#+begin_src shell
+The following tasks are available:
+
+test         Run all tests, or run only matching --mark / --test-name / --namespace
+docker:pull  Update local archlinux image
+docker:build Build a Docker container from ./dockerfiles/Dockerfile
+docker:run   Run container 'fts', with --cmd CMD run that command instead of default 'bb test'
+docker:clean Remove image and container created from ./dockerfiles/Dockerfile
 #+end_src
